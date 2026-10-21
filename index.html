@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Inspection Follow-Up Tracker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5; color: #333; padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a237e, #283593);
+            color: white; padding: 25px 30px; border-radius: 12px;
+            margin-bottom: 20px; box-shadow: 0 4px 15px rgba(26,35,126,0.3);
+        }
+        .header h1 { font-size: 28px; margin-bottom: 5px; }
+        .header p { opacity: 0.85; font-size: 14px; }
+        .stats-bar { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-card {
+            background: white; padding: 18px 25px; border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); flex: 1; min-width: 180px; text-align: center;
+        }
+        .stat-card .number { font-size: 32px; font-weight: 700; color: #1a237e; }
+        .stat-card .label { font-size: 13px; color: #666; margin-top: 4px; }
+        .stat-card.inspected .number { color: #2e7d32; }
+        .stat-card.pending .number { color: #e65100; }
+        .stat-card.total .number { color: #1a237e; }
+        .controls {
+            background: white; padding: 20px 25px; border-radius: 10px;
+            margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex; gap: 15px; flex-wrap: wrap; align-items: center;
+        }
+        .controls label { font-weight: 600; font-size: 14px; }
+        .controls input, .controls select {
+            padding: 8px 14px; border: 2px solid #e0e0e0; border-radius: 8px;
+            font-size: 14px; outline: none; transition: border-color 0.3s;
+        }
+        .controls input:focus, .controls select:focus { border-color: #1a237e; }
+        .controls input[type="text"] { width: 250px; }
+        .controls input[type="url"] { width: 400px; }
+        .btn {
+            padding: 9px 20px; border: none; border-radius: 8px; cursor: pointer;
+            font-size: 14px; font-weight: 600; transition: all 0.3s;
+        }
+        .btn-primary { background: #1a237e; color: white; }
+        .btn-primary:hover { background: #283593; }
+        .btn-success { background: #2e7d32; color: white; }
+        .btn-success:hover { background: #388e3c; }
+        .btn-warning { background: #e65100; color: white; }
+        .btn-warning:hover { background: #f57c00; }
+        .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; }
+        .btn-danger { background: #c62828; color: white; }
+        .btn-danger:hover { background: #d32f2f; }
+        .btn-sync { background: #00838f; color: white; }
+        .btn-sync:hover { background: #0097a7; }
+        .btn-sync:disabled { background: #90a4ae; cursor: not-allowed; }
+        .table-container {
+            background: white; border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: #1a237e; color: white; }
+        th { padding: 14px 16px; text-align: left; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; font-size: 14px; vertical-align: middle; }
+        tr:hover { background: #f8f9ff; }
+        .vehicle-id { font-weight: 700; color: #1a237e; font-size: 15px; }
+        .status-badge {
+            display: inline-block; padding: 5px 14px; border-radius: 20px;
+            font-size: 12px; font-weight: 600; text-transform: uppercase;
+        }
+        .status-inspected { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .status-pending { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+        .status-not-inspected { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .followup-list { max-height: 120px; overflow-y: auto; font-size: 12px; }
+        .followup-item {
+            background: #f5f5f5; padding: 6px 10px; border-radius: 6px;
+            margin-bottom: 4px; border-left: 3px solid #1a237e;
+        }
+        .followup-date { font-weight: 700; color: #1a237e; font-size: 11px; }
+        .followup-comment { color: #555; font-size: 11px; margin-top: 2px; }
+        .sync-status {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+        }
+        .sync-status.connected { background: #e8f5e9; color: #2e7d32; }
+        .sync-status.disconnected { background: #ffebee; color: #c62828; }
+        .sync-status.syncing { background: #fff3e0; color: #e65100; }
+        .sync-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        .sync-status.connected .sync-dot { background: #2e7d32; }
+        .sync-status.disconnected .sync-dot { background: #c62828; animation: none; }
+        .sync-status.syncing .sync-dot { background: #e65100; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .settings-panel {
+            background: white; padding: 20px 25px; border-radius: 10px;
+            margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: none;
+        }
+        .settings-panel.active { display: block; }
+        .settings-panel h3 { margin-bottom: 15px; color: #1a237e; }
+        .settings-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white; border-radius: 14px; padding: 30px;
+            width: 90%; max-width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .modal h2 { margin-bottom: 20px; color: #1a237e; }
+        .modal label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px; }
+        .modal input, .modal select, .modal textarea {
+            width: 100%; padding: 10px 14px; border: 2px solid #e0e0e0;
+            border-radius: 8px; font-size: 14px; margin-bottom: 15px; font-family: inherit;
+        }
+        .modal textarea { min-height: 80px; resize: vertical; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+        .toast {
+            position: fixed; bottom: 30px; right: 30px; background: #1a237e; color: white;
+            padding: 14px 24px; border-radius: 10px; font-size: 14px; font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 9999;
+        }
+        .toast.success { background: #2e7d32; }
+        .toast.error { background: #c62828; }
+        .toast.warning { background: #e65100; }
+        @media (max-width: 768px) {
+            .controls { flex-direction: column; }
+            .controls input[type="text"], .controls input[type="url"] { width: 100%; }
+            th, td { padding: 8px 10px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🚗 Vehicle Inspection Follow-Up Tracker</h1>
+        <p>Track inspection status, follow-up dates, and comments for all vehicles</p>
+    </div>
+
+    <div class="stats-bar">
+        <div class="stat-card total">
+            <div class="number" id="totalCount">0</div>
+            <div class="label">Total Vehicles</div>
+        </div>
+        <div class="stat-card inspected">
+            <div class="number" id="inspectedCount">0</div>
+            <div class="label">Inspected</div>
+        </div>
+        <div class="stat-card pending">
+            <div class="number" id="pendingCount">0</div>
+            <div class="label">Pending</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" id="notInspectedCount">0</div>
+            <div class="label">Not Inspected</div>
+        </div>
+    </div>
+
+    <!-- Sync Status Bar -->
+    <div class="controls">
+        <div class="sync-status disconnected" id="syncStatus">
+            <span class="sync-dot"></span>
+            <span id="syncStatusText">Not Connected</span>
+        </div>
+        <span class="timestamp" id="lastSyncTime"></span>
+        <button class="btn btn-sync" id="syncBtn" onclick="syncFromSheet()">🔄 Sync from Sheet</button>
+        <button class="btn btn-primary" onclick="toggleSettings()">⚙️ Settings</button>
+        <button class="btn btn-success" onclick="saveLocal()">💾 Save Local</button>
+        <button class="btn btn-warning" onclick="exportData()"> Export CSV</button>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settingsPanel">
+        <h3>⚙️ Google Sheets Configuration</h3>
+        <div class="settings-row">
+            <label>Apps Script Web App URL:</label>
+            <input type="url" id="sheetUrl" placeholder="https://script.google.com/macros/s/XXXXX/exec" style="flex:1;">
+        </div>
+        <div class="settings-row">
+            <label>
+                <input type="checkbox" id="autoSync" checked> Auto-sync on load
+            </label>
+            <label>
+                <input type="checkbox" id="autoSyncInterval"> Auto-sync every 5 minutes
+            </label>
+        </div>
+        <div class="settings-row">
+            <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            <button class="btn btn-success" onclick="initSheet()"> Initialize Sheet with All IDs</button>
+            <button class="btn btn-danger" onclick="clearSettings()">Clear Settings</button>
+        </div>
+        <p style="margin-top:10px; font-size:12px; color:#666;">
+            💡 Get the URL from: Google Sheet → Extensions → Apps Script → Deploy → Web App
+        </p>
+    </div>
+
+    <!-- Search & Filter -->
+    <div class="controls">
+        <label>🔍 Search:</label>
+        <input type="text" id="searchInput" placeholder="Search Vehicle ID..." oninput="filterTable()">
+        <label>Filter:</label>
+        <select id="filterStatus" onchange="filterTable()">
+            <option value="all">All Status</option>
+            <option value="inspected">Inspected</option>
+            <option value="pending">Pending</option>
+            <option value="not-inspected">Not Inspected</option>
+        </select>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Vehicle ID</th>
+                    <th>Inspection Status</th>
+                    <th>Follow-Up Dates & Comments</th>
+                    <th>Add Follow-Up</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="vehicleTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Follow-Up Modal -->
+    <div class="modal-overlay" id="followupModal">
+        <div class="modal">
+            <h2>📅 Add Follow-Up</h2>
+            <p style="margin-bottom:15px; color:#666;">Vehicle: <strong id="modalVehicleId"></strong></p>
+            <label>Follow-Up Date:</label>
+            <input type="date" id="followupDate">
+            <label>Comment / Notes:</label>
+            <textarea id="followupComment" placeholder="Enter follow-up notes..."></textarea>
+            <div class="modal-actions">
+                <button class="btn btn-danger" onclick="closeModal('followupModal')">Cancel</button>
+                <button class="btn btn-success" onclick="saveFollowUp()">Save Follow-Up</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Modal -->
+    <div class="modal-overlay" id="statusModal">
+        <div class="modal">
+            <h2> Update Inspection Status</h2>
+            <p style="margin-bottom:15px; color:#666;">Vehicle: <strong id="statusVehicleId"></strong></p>
+            <label>Status:</label>
+            <select id="newStatus">
+                <option value="pending">Pending</option>
+                <option value="inspected">Inspected</option>
+                <option value="not-inspected">Not Inspected</option>
+            </select>
+            <label>Comment (optional):</label>
+            <textarea id="statusComment" placeholder="Add a comment..."></textarea>
+            <div class="modal-actions">
+                <button class="btn btn-danger" onclick="closeModal('statusModal')">Cancel</button>
+                <button class="btn btn-success" onclick="saveStatus()">Update Status</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // All vehicle IDs from the image
+        const vehicleIds = [
+            "MA6489","MA6844","MA7269","MA7254","MA6842","MA7278","MA7244","MA6978",
+            "MA7308","MA6938","MA7322","MA6438","MA6975","MA6991","MA7358","MA6870",
+            "MA6998","MA6960","MA6926","MA7202","MA7301","MA7349","MA7346","MA6974",
+            "MA6981","MA6740","MA7273","MA7258","MA6852","MA6966","MA6333","MA6830",
+            "MA6970","MA7366","MA7287","MA7368","MA6803","MA6481","MA7221","MA6921",
+            "MA6447","MA7343","MA7231","MA7206",
+            "MA7375","MA7376","MA7386","MA7360","MA6972","MA6705","MA7371","MA6700",
+            "MA6628","MA1818","MA7243","MA7288","MA7220","MA7351","MA7234","MA7339",
+            "MA6666","MA6815","MA7204","MA7341","MA6477","MA7352","MA6999","MA7361",
+            "MA6955","MA7211","MA6907","MA7266","MA7363","MA6445","MA6277","MA7356",
+            "MA7362","MA7331","MA6962","MA6988",
+            "MA4870","MA4825","MA4879","MA4611","MA4875","MA4801","MA4682","MA4809",
+            "MA2172","MA4869","MA4824","MA4841","MA4797","MA4804","MA4232","MA4861",
+            "MA4830","MA4593","MA4886","MA4840","MA4889"
+        ];
+
+        let vehicleData = {};
+        let currentVehicleId = '';
+        let syncInterval = null;
+
+        // Initialize
+        function init() {
+            loadLocalData();
+            loadSettings();
+            renderTable();
+            updateStats();
+
+            if (document.getElementById('autoSync').checked && getSheetUrl()) {
+                syncFromSheet();
+            }
+
+            if (document.getElementById('autoSyncInterval').checked && getSheetUrl()) {
+                startAutoSync();
+            }
+        }
+
+        function getSheetUrl() {
+            return localStorage.getItem('sheetUrl') || document.getElementById('sheetUrl').value;
+        }
+
+        function loadLocalData() {
+            const saved = localStorage.getItem('vehicleInspectionData');
+            if (saved) {
+                vehicleData = JSON.parse(saved);
+                vehicleIds.forEach(id => {
+                    if (!vehicleData[id]) {
+                        vehicleData[id] = { status: 'pending', followUps: [], lastUpdated: new Date().toISOString() };
+                    }
+                });
+            } else {
+                vehicleIds.forEach(id => {
+                    vehicleData[id] = { status: 'pending', followUps: [], lastUpdated: new Date().toISOString() };
+                });
+            }
+        }
+
+        function loadSettings() {
+            const url = localStorage.getItem('sheetUrl');
+            const autoSync = localStorage.getItem('autoSync');
+            const autoInterval = localStorage.getItem('autoSyncInterval');
+
+            if (url) document.getElementById('sheetUrl').value = url;
+            if (autoSync !== null) document.getElementById('autoSync').checked = autoSync === 'true';
+            if (autoInterval !== null) document.getElementById('autoSyncInterval').checked = autoInterval === 'true';
+        }
+
+        function saveSettings() {
+            const url = document.getElementById('sheetUrl').value.trim();
+            localStorage.setItem('sheetUrl', url);
+            localStorage.setItem('autoSync', document.getElementById('autoSync').checked);
+            localStorage.setItem('autoSyncInterval', document.getElementById('autoSyncInterval').checked);
+
+            if (document.getElementById('autoSyncInterval').checked && url) {
+                startAutoSync();
+            } else {
+                stopAutoSync();
+            }
+
+            showToast('Settings saved!', 'success');
+            updateSyncStatus('connected', 'Connected');
+        }
+
+        function clearSettings() {
+            if (confirm('Clear all settings and disconnect from Google Sheet?')) {
+                localStorage.removeItem('sheetUrl');
+                localStorage.removeItem('autoSync');
+                localStorage.removeItem('autoSyncInterval');
+                document.getElementById('sheetUrl').value = '';
+                document.getElementById('autoSync').checked = true;
+                document.getElementById('autoSyncInterval').checked = false;
+                stopAutoSync();
+                updateSyncStatus('disconnected', 'Not Connected');
+                showToast('Settings cleared', 'warning');
+            }
+        }
+
+        function toggleSettings() {
+            document.getElementById('settingsPanel').classList.toggle('active');
+        }
+
+        function updateSyncStatus(state, text) {
+            const el = document.getElementById('syncStatus');
+            el.className = 'sync-status ' + state;
+            document.getElementById('syncStatusText').textContent = text;
+        }
+
+        function setLastSyncTime() {
+            const now = new Date();
+            document.getElementById('lastSyncTime').textContent = 'Last sync: ' + now.toLocaleString();
+        }
+
+        // ===== SYNC FUNCTIONS =====
+        async function syncFromSheet() {
+            const url = getSheetUrl();
+            if (!url) {
+                showToast('Please set the Apps Script URL in Settings', 'error');
+                return;
+            }
+
+            updateSyncStatus('syncing', 'Syncing...');
+            document.getElementById('syncBtn').disabled = true;
+
+            try {
+                const response = await fetch(url, { method: 'GET' });
+                const result = await response.json();
+
+                if (result.success) {
+                    Object.keys(result.data).forEach(id => {
+                        if (vehicleData[id]) {
+                            vehicleData[id] = result.data[id];
+                        }
+                    });
+
+                    saveLocalData();
+                    renderTable();
+                    updateStats();
+                    setLastSyncTime();
+                    updateSyncStatus('connected', `Connected (${result.count} vehicles)`);
+                    showToast(`Synced ${result.count} vehicles from sheet`, 'success');
+                } else {
+                    throw new Error(result.error || 'Unknown error');
+                }
+            } catch (error) {
+                console.error('Sync error:', error);
+                updateSyncStatus('disconnected', 'Sync Failed');
+                showToast('Sync failed: ' + error.message, 'error');
+            } finally {
+                document.getElementById('syncBtn').disabled = false;
+            }
+        }
+
+        async function pushToSheet(action, payload) {
+            const url = getSheetUrl();
+            if (!url) return false;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({ action, ...payload })
+                });
+                return true;
+            } catch (error) {
+                console.error('Push error:', error);
+                return false;
+            }
+        }
+
+        async function initSheet() {
+            const url = getSheetUrl();
+            if (!url) {
+                showToast('Please set the Apps Script URL first', 'error');
+                return;
+            }
+
+            if (!confirm('This will initialize the sheet with all ' + vehicleIds.length + ' vehicle IDs. Continue?')) return;
+
+            updateSyncStatus('syncing', 'Initializing...');
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({ action: 'initSheet', vehicleIds })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`Sheet initialized with ${result.count} vehicles`, 'success');
+                    updateSyncStatus('connected', 'Connected');
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                showToast('Init failed: ' + error.message, 'error');
+                updateSyncStatus('disconnected', 'Failed');
+            }
+        }
+
+        function startAutoSync() {
+            stopAutoSync();
+            syncInterval = setInterval(syncFromSheet, 5 * 60 * 1000);
+        }
+
+        function stopAutoSync() {
+            if (syncInterval) {
+                clearInterval(syncInterval);
+                syncInterval = null;
+            }
+        }
+
+        // ===== TABLE FUNCTIONS =====
+        function renderTable(filteredData = null) {
+            const tbody = document.getElementById('vehicleTableBody');
+            tbody.innerHTML = '';
+            const data = filteredData || vehicleIds;
+            let index = 1;
+
+            data.forEach(id => {
+                const v = vehicleData[id];
+                if (!v) return;
+
+                const statusClass = v.status === 'inspected' ? 'status-inspected' :
+                                    v.status === 'not-inspected' ? 'status-not-inspected' : 'status-pending';
+                const statusText = v.status === 'inspected' ? '✅ Inspected' :
+                                   v.status === 'not-inspected' ? '❌ Not Inspected' : '⏳ Pending';
+
+                let followUpHTML = '';
+                if (v.followUps && v.followUps.length > 0) {
+                    followUpHTML = '<div class="followup-list">';
+                    v.followUps.forEach(fu => {
+                        followUpHTML += `
+                            <div class="followup-item">
+                                <div class="followup-date">📅 ${fu.date}</div>
+                                <div class="followup-comment">${fu.comment || 'No comment'}</div>
+                            </div>
+                        `;
+                    });
+                    followUpHTML += '</div>';
+                } else {
+                    followUpHTML = '<span style="color:#999; font-size:12px;">No follow-ups yet</span>';
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${index++}</td>
+                    <td class="vehicle-id">${id}</td>
+                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                    <td>${followUpHTML}</td>
+                    <td><button class="btn btn-primary btn-sm" onclick="openModal('followupModal','${id}')">+ Add</button></td>
+                    <td>
+                        <button class="btn btn-warning btn-sm" onclick="openModal('statusModal','${id}')">Status</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteFollowUp('${id}')">🗑️</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateStats() {
+            let inspected = 0, pending = 0, notInspected = 0;
+            vehicleIds.forEach(id => {
+                const v = vehicleData[id];
+                if (v.status === 'inspected') inspected++;
+                else if (v.status === 'not-inspected') notInspected++;
+                else pending++;
+            });
+            document.getElementById('totalCount').textContent = vehicleIds.length;
+            document.getElementById('inspectedCount').textContent = inspected;
+            document.getElementById('pendingCount').textContent = pending;
+            document.getElementById('notInspectedCount').textContent = notInspected;
+        }
+
+        function filterTable() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const status = document.getElementById('filterStatus').value;
+            const filtered = vehicleIds.filter(id => {
+                const matchSearch = id.toLowerCase().includes(search);
+                const matchStatus = status === 'all' || vehicleData[id].status === status;
+                return matchSearch && matchStatus;
+            });
+            renderTable(filtered);
+        }
+
+        function openModal(modalId, id) {
+            currentVehicleId = id;
+            if (modalId === 'followupModal') {
+                document.getElementById('modalVehicleId').textContent = id;
+                document.getElementById('followupDate').value = new Date().toISOString().split('T')[0];
+                document.getElementById('followupComment').value = '';
+            } else if (modalId === 'statusModal') {
+                document.getElementById('statusVehicleId').textContent = id;
+                document.getElementById('newStatus').value = vehicleData[id].status;
+                document.getElementById('statusComment').value = '';
+            }
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        async function saveFollowUp() {
+            const date = document.getElementById('followupDate').value;
+            const comment = document.getElementById('followupComment').value;
+
+            if (!date) { showToast('Please select a date', 'error'); return; }
+
+            if (!vehicleData[currentVehicleId].followUps) {
+                vehicleData[currentVehicleId].followUps = [];
+            }
+
+            vehicleData[currentVehicleId].followUps.push({
+                date, comment, timestamp: new Date().toISOString()
+            });
+            vehicleData[currentVehicleId].lastUpdated = new Date().toISOString();
+
+            closeModal('followupModal');
+            renderTable();
+            updateStats();
+            saveLocalData();
+
+            await pushToSheet('addFollowUp', {
+                vehicleId: currentVehicleId, date, comment
+            });
+        }
+
+        async function saveStatus() {
+            const newStatus = document.getElementById('newStatus').value;
+            const comment = document.getElementById('statusComment').value;
+
+            vehicleData[currentVehicleId].status = newStatus;
+            vehicleData[currentVehicleId].lastUpdated = new Date().toISOString();
+
+            if (comment) {
+                if (!vehicleData[currentVehicleId].followUps) {
+                    vehicleData[currentVehicleId].followUps = [];
+                }
+                vehicleData[currentVehicleId].followUps.push({
+                    date: new Date().toISOString().split('T')[0],
+                    comment: `[Status: ${newStatus}] ${comment}`,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
+            closeModal('statusModal');
+            renderTable();
+            updateStats();
+            saveLocalData();
+
+            await pushToSheet('updateStatus', {
+                vehicleId: currentVehicleId, status: newStatus, comment
+            });
+        }
+
+        async function deleteFollowUp(id) {
+            if (!confirm(`Clear all follow-ups for ${id}?`)) return;
+            vehicleData[id].followUps = [];
+            renderTable();
+            saveLocalData();
+            await pushToSheet('clearFollowUps', { vehicleId: id });
+        }
+
+        function saveLocalData() {
+            localStorage.setItem('vehicleInspectionData', JSON.stringify(vehicleData));
+        }
+
+        function saveLocal() {
+            saveLocalData();
+            showToast('Data saved locally!', 'success');
+        }
+
+        function exportData() {
+            let csv = 'Vehicle ID,Status,Follow-Up Date,Comment,Timestamp\n';
+            vehicleIds.forEach(id => {
+                const v = vehicleData[id];
+                if (v.followUps && v.followUps.length > 0) {
+                    v.followUps.forEach(fu => {
+                        csv += `${id},${v.status},${fu.date},"${(fu.comment || '').replace(/"/g, '""')}",${fu.timestamp}\n`;
+                    });
+                } else {
+                    csv += `${id},${v.status},,,\n`;
+                }
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `vehicle_inspection_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Exported as CSV!', 'success');
+        }
+
+        function showToast(message, type = '') {
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function(e) {
+                if (e.target === this) this.classList.remove('active');
+            });
+        });
+
+        init();
+    </script>
+</body>
+</html>
